@@ -1,10 +1,11 @@
 package main
 
 import (
-	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -14,8 +15,8 @@ func main() {
 	if port == "" {
 		port = "8080"
 	}
-
-	fmt.Printf("Echo server listening on port %s.\n", port)
+	log.SetOutput(os.Stdout)
+	log.Printf("Echo server listening on port %s.\n", port)
 	err := http.ListenAndServe(":"+port, http.HandlerFunc(handler))
 	if err != nil {
 		panic(err)
@@ -29,7 +30,7 @@ var upgrader = websocket.Upgrader{
 }
 
 func handler(wr http.ResponseWriter, req *http.Request) {
-	fmt.Printf("%s | %s %s\n", req.RemoteAddr, req.Method, req.URL)
+	log.Printf("%s | %s %s\n", req.RemoteAddr, req.Method, req.URL)
 	if websocket.IsWebSocketUpgrade(req) {
 		serveWebSocket(wr, req)
 	} else if req.URL.Scheme == "ws" {
@@ -44,47 +45,39 @@ func handler(wr http.ResponseWriter, req *http.Request) {
 func serveWebSocket(wr http.ResponseWriter, req *http.Request) {
 	connection, err := upgrader.Upgrade(wr, req, nil)
 	if err != nil {
-		fmt.Printf("%s | %s\n", req.RemoteAddr, err)
+		log.Printf("%s | %s\n", req.RemoteAddr, err)
 		return
 	}
 
 	defer connection.Close()
-	fmt.Printf("%s | upgraded to websocket\n", req.RemoteAddr)
+	log.Printf("%s | upgraded to websocket\n", req.RemoteAddr)
 
 	var message []byte
+	var messageType int
 
-	host, err := os.Hostname()
-	if err == nil {
-		message = []byte(fmt.Sprintf("Request served by %s", host))
-	} else {
-		message = []byte(fmt.Sprintf("Server hostname unknown: %s", err.Error()))
-	}
+	for {
+		// Wait at most 30 seconds for any message...
+		connection.SetReadDeadline(time.Now().Add(30 * time.Second))
 
-	err = connection.WriteMessage(websocket.TextMessage, message)
-	if err == nil {
-		var messageType int
+		messageType, message, err = connection.ReadMessage()
+		if err != nil {
+			break
+		}
 
-		for {
-			messageType, message, err = connection.ReadMessage()
-			if err != nil {
-				break
-			}
+		if messageType == websocket.TextMessage {
+			log.Printf("%s | txt | %s\n", req.RemoteAddr, message)
+		} else {
+			log.Printf("%s | bin | %d byte(s)\n", req.RemoteAddr, len(message))
+		}
 
-			if messageType == websocket.TextMessage {
-				fmt.Printf("%s | txt | %s\n", req.RemoteAddr, message)
-			} else {
-				fmt.Printf("%s | bin | %d byte(s)\n", req.RemoteAddr, len(message))
-			}
-
-			err = connection.WriteMessage(messageType, message)
-			if err != nil {
-				break
-			}
+		err = connection.WriteMessage(messageType, message)
+		if err != nil {
+			break
 		}
 	}
 
 	if err != nil {
-		fmt.Printf("%s | %s\n", req.RemoteAddr, err)
+		log.Printf("%s | %s\n", req.RemoteAddr, err)
 	}
 }
 
