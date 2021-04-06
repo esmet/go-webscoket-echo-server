@@ -32,7 +32,7 @@ func handler(wr http.ResponseWriter, req *http.Request) {
 	fmt.Printf("%s | %s %s\n", req.RemoteAddr, req.Method, req.URL)
 	if websocket.IsWebSocketUpgrade(req) {
 		serveWebSocket(wr, req)
-	} else if req.URL.Path == "/.ws" {
+	} else if req.URL.Scheme == "ws" {
 		wr.Header().Add("Content-Type", "text/html")
 		wr.WriteHeader(200)
 		io.WriteString(wr, websocketHTML)
@@ -90,24 +90,5 @@ func serveWebSocket(wr http.ResponseWriter, req *http.Request) {
 
 func serveHTTP(wr http.ResponseWriter, req *http.Request) {
 	wr.Header().Add("Content-Type", "text/plain")
-	wr.WriteHeader(200)
-
-	host, err := os.Hostname()
-	if err == nil {
-		fmt.Fprintf(wr, "Request served by %s\n\n", host)
-	} else {
-		fmt.Fprintf(wr, "Server hostname unknown: %s\n\n", err.Error())
-	}
-
-	fmt.Fprintf(wr, "%s %s %s\n", req.Proto, req.Method, req.URL)
-	fmt.Fprintln(wr, "")
-	fmt.Fprintf(wr, "Host: %s\n", req.Host)
-	for key, values := range req.Header {
-		for _, value := range values {
-			fmt.Fprintf(wr, "%s: %s\n", key, value)
-		}
-	}
-
-	fmt.Fprintln(wr, "")
-	io.Copy(wr, req.Body)
+	wr.WriteHeader(http.StatusNotFound)
 }
